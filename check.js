@@ -8,14 +8,23 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 async function fetchPage() {
-    const res = await fetch(URL, {
-        headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "Accept": "text/html",
-        },
-    });
-    if (!res.ok) throw new Error("Fetch failed: " + res.status);
-    return res.text();
+    const controller = new AbortController();
+    // 15 seconds timeout 
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+        const res = await fetch(URL, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "Accept": "text/html",
+            },
+            signal: controller.signal
+        });
+        if (!res.ok) throw new Error("Fetch failed: " + res.status);
+        return await res.text();
+    } finally {
+        clearTimeout(timeout);
+    }
 }
 
 function loadState() {
@@ -48,7 +57,13 @@ async function main() {
     if (!EMAIL_USER || !EMAIL_PASS || !EMAIL_TO) {
         throw new Error("Missing EMAIL_USER / EMAIL_PASS / EMAIL_TO in .env file");
     }
-    const html = await fetchPage();
+    let html;
+    try {
+        html = await fetchPage();
+    } catch (e) {
+        console.error("Failed to fetch page:", e);
+        throw e;
+    }
     const found = html.includes(TARGET);
 
     const state = loadState();
@@ -56,10 +71,14 @@ async function main() {
 
     if (found && !state.notified) {
         const msg = `"${TARGET}" is now visible on HMT site!\n\n${URL}`;
-        await sendEmail("HMT Watch In Stock Alert", msg);
-        state.notified = true;
-        saveState(state);
-        console.log("Email sent.");
+        try {
+            await sendEmail("HMT Watch In Stock Alert", msg);
+            state.notified = true;
+            saveState(state);
+            console.log("Email sent.");
+        } catch (e) {
+            console.error("Failed to send email:", e);
+        }
     } else if (!found) {
         // reset so you get email again next time it reappears
         state.notified = false;
