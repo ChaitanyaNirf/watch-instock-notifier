@@ -64,13 +64,13 @@ async function main() {
         console.error("Failed to fetch page:", e);
         throw e;
     }
-    const found = html.includes(TARGET);
+    const found = TARGET.some(target => html.includes(target));
 
     const state = loadState();
     console.log("Found target?", found);
 
     if (found && !state.notified) {
-        const msg = `"${TARGET}" is now visible on HMT site!\n\n${URL}`;
+        const msg = `"${TARGET.join(", ")}" is now visible on HMT site!\n\n${URL}`;
         try {
             await sendEmail("HMT Watch In Stock Alert", msg);
             state.notified = true;
